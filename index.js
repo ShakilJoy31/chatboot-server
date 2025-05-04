@@ -10,7 +10,7 @@ import { mongo } from 'mongoose';
 dotenv.config();
 const app = express();
 app.use(cors());
-const port = 5000;
+const port = 2000;
 const nodeEnv = process.env.MONGO_URI;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
