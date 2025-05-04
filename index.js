@@ -1,20 +1,20 @@
 import cors from 'cors';
 import dotenv from 'dotenv';
 import express from 'express';
-import {
-  MongoClient,
-  ServerApiVersion,
-} from 'mongodb';
-import { mongo } from 'mongoose';
+import fetch from 'node-fetch';
+import { MongoClient, ServerApiVersion } from 'mongodb';
 
+// Load environment variables
 dotenv.config();
+
+// Initialize Express app
 const app = express();
 app.use(cors());
-const port = 2000;
-const nodeEnv = process.env.MONGO_URI;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-const uri = nodeEnv;
+
+// MongoDB Connection
+const uri = process.env.MONGO_URI;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -23,102 +23,124 @@ const client = new MongoClient(uri, {
   },
 });
 
+// Connect to MongoDB with retry logic
 const connectWithRetry = async () => {
   try {
     await client.connect();
+    await client.db("admin").command({ ping: 1 });
     console.log('Connected to MongoDB');
   } catch (err) {
     console.error('Error connecting to MongoDB:', err);
     setTimeout(connectWithRetry, 5000);
   }
 };
+
 connectWithRetry();
 
-// The mongodb connection string is stored in the .env file. The connection string is used to connect to the MongoDB database. The connection string is stored in the MONGO_URI variable. The MONGO_URI variable is used to connect to the MongoDB database. The connection string is stored in the .env file. The connection string is used to connect to the MongoDB database. The connection string is stored in the MONGO_URI variable. The MONGO_URI variable is used to connect to the MongoDB database.
-
+// Collections (uncomment when needed)
 // const userCollection = client.db("test").collection("users");
 // const placedProducts = client.db("test").collection("userAndProducts");
 // const authentication = client.db("test").collection("authentication");
-async function run() {
-  try {
-    await client.connect();clearImmediate
-    await client.db("users").command({ ping: 1 });
-    console.log("Database is connected successfully.");
-  } finally {
-  }
-}
-run().catch(console.dir);
 
-
-// The webhook configurations...........................................................
-
-// Posting message.
-app.post("/webhook", (req, res) => {
+// Webhook Handlers
+app.post("/webhook", async (req, res) => {
   let body = req.body;
 
   console.log(`\u{1F7EA} Received webhook:`);
   console.dir(body, { depth: null });
     
   if (body.object === "page") {
-    // Iterate through each entry (there may be multiple if batched)
-    body.entry.forEach(function(entry) {
-      // Iterate through each messaging event
-      entry.messaging.forEach(function(event) {
+    // Process entries in parallel
+    const processing = body.entry.map(async (entry) => {
+      await Promise.all(entry.messaging.map(async (event) => {
         if (event.message) {
-          // Handle message event
           console.log("Received message:", event.message);
-          handleMessage(event);
+          await handleMessage(event);
         } else if (event.postback) {
-          // Handle postback event
           console.log("Received postback:", event.postback);
+          // Handle postback here if needed
         }
-      });
+      }));
     });
 
+    await Promise.all(processing);
     res.status(200).send("EVENT_RECEIVED");
   } else {
     res.sendStatus(404);
   }
 });
 
-function handleMessage(event) {
+async function handleMessage(event) {
   const senderId = event.sender.id;
   const message = event.message;
   
   console.log(`Received message from ${senderId}:`, message.text);
-  // Here you would typically process the message and send a reply
+  
+  try {
+    await sendTextMessage(senderId, "Please wait. I am coming");
+  } catch (error) {
+    console.error('Failed to send reply:', error);
+  }
 }
 
+async function sendTextMessage(recipientId, messageText) {
+  const messageData = {
+    recipient: { id: recipientId },
+    message: { text: messageText }
+  };
 
-// Getting messages.
-// Add support for GET requests to our webhook
-app.get("/webhook", (req, res) => {
-  // Parse the query params
-    let mode = req.query["hub.mode"];
-    let token = req.query["hub.verify_token"];
-    let challenge = req.query["hub.challenge"];
-  
-    // Check if a token and mode is in the query string of the request
-    if (mode && token) {
-      // Check the mode and token sent is correct
-      if (mode === "subscribe" && token === process.env.FACEBOOK_PAGE_ACCESS_TOKEN) {
-        // Respond with the challenge token from the request
-        console.log("WEBHOOK_VERIFIED");
-        res.status(200).send(challenge);
-      } else {
-        // Respond with '403 Forbidden' if verify tokens do not match
-        res.sendStatus(403);
+  await callSendAPI(messageData);
+}
+
+async function callSendAPI(messageData) {
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v12.0/me/messages?access_token=${process.env.FACEBOOK_PAGE_ACCESS_TOKEN}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(messageData),
       }
+    );
+
+    const data = await response.json();
+    
+    if (response.ok) {
+      console.log("Successfully sent message with id %s to recipient %s", 
+        data.message_id, data.recipient_id);
+    } else {
+      console.error("Failed to send message:", data.error);
+      throw new Error(data.error.message);
     }
-  });
+  } catch (error) {
+    console.error("API request failed:", error);
+    throw error;
+  }
+}
 
-
-
-app.listen(port, () => {
-  console.log(`Task app listening on ${port}`);
+// Webhook Verification
+app.get("/webhook", (req, res) => {
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+  
+  if (mode && token) {
+    if (mode === "subscribe" && token === process.env.FACEBOOK_PAGE_ACCESS_TOKEN) {
+      console.log("WEBHOOK_VERIFIED");
+      return res.status(200).send(challenge);
+    }
+    return res.sendStatus(403);
+  }
+  return res.sendStatus(400);
 });
 
+// Health Check
 app.get("/", (req, res) => {
-  res.send("Chatboot server is running successfully!");
+  res.send("Chatbot server is running successfully!");
 });
 
+// Start Server
+const PORT = process.env.PORT || 2000;
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
