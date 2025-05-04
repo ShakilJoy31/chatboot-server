@@ -37,6 +37,11 @@ const connectWithRetry = async () => {
 
 connectWithRetry();
 
+// Collections (uncomment when needed)
+// const userCollection = client.db("test").collection("users");
+// const placedProducts = client.db("test").collection("userAndProducts");
+// const authentication = client.db("test").collection("authentication");
+
 // Webhook Handlers
 app.post("/webhook", async (req, res) => {
   let body = req.body;
@@ -48,12 +53,12 @@ app.post("/webhook", async (req, res) => {
     // Process entries in parallel
     const processing = body.entry.map(async (entry) => {
       await Promise.all(entry.messaging.map(async (event) => {
-        // Skip echo messages (messages sent by your own bot)
-        if (event.message && !event.message.is_echo) {
+        if (event.message) {
           console.log("Received message:", event.message);
           await handleMessage(event);
         } else if (event.postback) {
           console.log("Received postback:", event.postback);
+          // Handle postback here if needed
         }
       }));
     });
@@ -72,65 +77,13 @@ async function handleMessage(event) {
   console.log(`Received message from ${senderId}:`, message.text);
   
   try {
-    // Get response from DeepSeek AI
-    const aiResponse = await getAIResponse(message.text);
-    
-    // Send the AI response back to the user
-    await sendTextMessage(senderId, aiResponse);
+    await sendTextMessage(senderId, "Please wait. I am coming");
   } catch (error) {
-    console.error('Failed to process message:', error);
-    // Only send error message if it's not an echo
-    if (!message.is_echo) {
-      await sendTextMessage(senderId, "Sorry, I'm having trouble responding right now. Please try again later.");
-    }
-  }
-}
-
-async function getAIResponse(userMessage) {
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": process.env.OPENROUTER_REFERER || "http://localhost:3000",
-        "X-Title": process.env.OPENROUTER_APP_TITLE || "Chatbot",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        "model": "deepseek/deepseek-r1:free",
-        "messages": [
-          {
-            "role": "user",
-            "content": userMessage
-          }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error("OpenRouter API Error:", errorData);
-      throw new Error(`AI API request failed with status ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("AI Response:", data);
-    
-    // Extract the AI's response content
-    return data.choices[0]?.message?.content || "I didn't get a response from the AI.";
-  } catch (error) {
-    console.error("Error getting AI response:", error);
-    throw error;
+    console.error('Failed to send reply:', error);
   }
 }
 
 async function sendTextMessage(recipientId, messageText) {
-  // Skip sending if recipientId matches your page ID to avoid loops
-  if (recipientId === process.env.FACEBOOK_PAGE_ID) {
-    console.log("Skipping message to self (page ID)");
-    return;
-  }
-
   const messageData = {
     recipient: { id: recipientId },
     message: { text: messageText }
