@@ -60,13 +60,34 @@ app.post("/webhook", (req, res) => {
   console.dir(body, { depth: null });
     
   if (body.object === "page") {
-    // Returns a '200 OK' response to all requests
+    // Iterate through each entry (there may be multiple if batched)
+    body.entry.forEach(function(entry) {
+      // Iterate through each messaging event
+      entry.messaging.forEach(function(event) {
+        if (event.message) {
+          // Handle message event
+          console.log("Received message:", event.message);
+          handleMessage(event);
+        } else if (event.postback) {
+          // Handle postback event
+          console.log("Received postback:", event.postback);
+        }
+      });
+    });
+
     res.status(200).send("EVENT_RECEIVED");
   } else {
-    // Return a '404 Not Found' if event is not from a page subscription
     res.sendStatus(404);
   }
-}); 
+});
+
+function handleMessage(event) {
+  const senderId = event.sender.id;
+  const message = event.message;
+  
+  console.log(`Received message from ${senderId}:`, message.text);
+  // Here you would typically process the message and send a reply
+}
 
 
 // Getting messages.
