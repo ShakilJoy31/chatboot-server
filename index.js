@@ -48,12 +48,12 @@ app.post("/webhook", async (req, res) => {
     // Process entries in parallel
     const processing = body.entry.map(async (entry) => {
       await Promise.all(entry.messaging.map(async (event) => {
-        if (event.message) {
+        // Skip echo messages (messages sent by your own bot)
+        if (event.message && !event.message.is_echo) {
           console.log("Received message:", event.message);
           await handleMessage(event);
         } else if (event.postback) {
           console.log("Received postback:", event.postback);
-          // Handle postback here if needed
         }
       }));
     });
@@ -79,8 +79,10 @@ async function handleMessage(event) {
     await sendTextMessage(senderId, aiResponse);
   } catch (error) {
     console.error('Failed to process message:', error);
-    // Send fallback message if AI fails
-    await sendTextMessage(senderId, "Sorry, I'm having trouble responding right now. Please try again later.");
+    // Only send error message if it's not an echo
+    if (!message.is_echo) {
+      await sendTextMessage(senderId, "Sorry, I'm having trouble responding right now. Please try again later.");
+    }
   }
 }
 
@@ -90,8 +92,8 @@ async function getAIResponse(userMessage) {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "Chatbot",
+        "HTTP-Referer": process.env.OPENROUTER_REFERER || "http://localhost:3000",
+        "X-Title": process.env.OPENROUTER_APP_TITLE || "Chatbot",
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -106,6 +108,8 @@ async function getAIResponse(userMessage) {
     });
 
     if (!response.ok) {
+      const errorData = await response.json();
+      console.error("OpenRouter API Error:", errorData);
       throw new Error(`AI API request failed with status ${response.status}`);
     }
 
@@ -121,6 +125,12 @@ async function getAIResponse(userMessage) {
 }
 
 async function sendTextMessage(recipientId, messageText) {
+  // Skip sending if recipientId matches your page ID to avoid loops
+  if (recipientId === process.env.FACEBOOK_PAGE_ID) {
+    console.log("Skipping message to self (page ID)");
+    return;
+  }
+
   const messageData = {
     recipient: { id: recipientId },
     message: { text: messageText }
