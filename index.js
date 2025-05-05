@@ -37,6 +37,52 @@ const connectWithRetry = async () => {
 
 connectWithRetry();
 
+// Collections (uncomment when needed)
+// const userCollection = client.db("test").collection("users");
+// const placedProducts = client.db("test").collection("userAndProducts");
+// const authentication = client.db("test").collection("authentication");
+
+const processReply = async (reply) => {
+  try {
+    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer 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",
+        "HTTP-Referer": "http://localhost:2000",
+        "X-Title": "Chatbot",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        "model": "deepseek/deepseek-r1:free",
+        "messages": [
+          {
+            "role": "user",
+            "content": reply || "Hello" // Using the passed reply parameter
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`API request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log(data);
+    return data; // Return the data for further processing
+  } catch (error) {
+    console.error("Error in processReply:", error.message);
+    // You might want to handle different error types differently
+    if (error instanceof TypeError) {
+      console.error("Network error occurred");
+    }
+    throw error; // Re-throw the error if you want calling code to handle it
+  }
+};
+
+// Example usage:
+// processReply("Your message here").then(data => ...).catch(err => ...);
+
 // Webhook Handlers
 app.post("/webhook", async (req, res) => {
   let body = req.body;
@@ -72,51 +118,9 @@ async function handleMessage(event) {
   console.log(`Received message from ${senderId}:`, message.text);
   
   try {
-    // Get response from DeepSeek AI
-    const aiResponse = await getAIResponse(message.text);
-    
-    // Send the AI response back to the user
-    await sendTextMessage(senderId, aiResponse);
+    await sendTextMessage(senderId, `Please wait. I am coming, your send message is ${message.text}`);
   } catch (error) {
-    console.error('Failed to process message:', error);
-    // Send fallback message if AI fails
-    await sendTextMessage(senderId, "Sorry, I'm having trouble responding right now. Please try again later.");
-  }
-}
-
-async function getAIResponse(userMessage) {
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "Chatbot",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        "model": "deepseek/deepseek-r1:free",
-        "messages": [
-          {
-            "role": "user",
-            "content": userMessage
-          }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      throw new Error(`AI API request failed with status ${response.status}`);
-    }
-
-    const data = await response.json();
-    console.log("AI Response:", data);
-    
-    // Extract the AI's response content
-    return data.choices[0]?.message?.content || "I didn't get a response from the AI.";
-  } catch (error) {
-    console.error("Error getting AI response:", error);
-    throw error;
+    console.error('Failed to send reply:', error);
   }
 }
 
@@ -173,6 +177,7 @@ app.get("/webhook", (req, res) => {
 
 // Health Check
 app.get("/", (req, res) => {
+  processReply();
   res.send("Chatbot server is running successfully!");
 });
 
