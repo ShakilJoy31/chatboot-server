@@ -154,7 +154,7 @@ async function callSendAPI(messageData) {
       throw new Error(data.error.message);
     }
   } catch (error) {
-    console.error("API request failed:", error);
+    console.error("API request failed:", error); 
     throw error;
   }
 }
