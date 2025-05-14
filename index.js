@@ -37,6 +37,38 @@ const connectWithRetry = async () => {
 
 connectWithRetry();
 
+async function getMedibotResponse(userMessage) {
+  console.log("User message:", userMessage);
+  try {
+    const response = await fetch("https://chat-pdf-8h3c.onrender.com/query", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        query: userMessage
+      })
+    });
+    console.log(response)
+
+    if (!response.ok) {
+      throw new Error(`Medibot API request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log("Medibot response:", data);
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Error getting Medibot response:", error);
+    throw error;
+  }
+}
+
 // Collections (uncomment when needed)
 // const userCollection = client.db("test").collection("users");
 // const placedProducts = client.db("test").collection("userAndProducts");
@@ -70,6 +102,8 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+
+
 async function handleMessage(event) {
   const senderId = event.sender.id;
   const message = event.message;
@@ -77,6 +111,9 @@ async function handleMessage(event) {
   console.log(`Received message from ${senderId}:`, message.text);
   
   try {
+    console.log("Processing message:", message.text);
+    const response = await getMedibotResponse(message.text);
+    console.log("Chatbot response:", response);
     await sendTextMessage(senderId, "Please wait. I am coming"+message.text);
   } catch (error) {
     console.error('Failed to send reply:', error);
@@ -135,8 +172,23 @@ app.get("/webhook", (req, res) => {
 });
 
 // Health Check
-app.get("/", (req, res) => {
-  res.send("Chatbot server is running successfully!");
+app.get("/", async (req, res) => {
+  try {
+    const response = await getMedibotResponse('How to do operation?');
+    console.log("Chatbot response:", response);
+    
+    // Send JSON response with both status message and chatbot response
+    res.status(200).json({
+      status: "Chatbot server is running successfully!",
+      chatbotResponse: response
+    });
+  } catch (error) {
+    console.error("Error in health check:", error);
+    res.status(500).json({
+      status: "Error",
+      message: error.message
+    });
+  }
 });
 
 // Start Server
