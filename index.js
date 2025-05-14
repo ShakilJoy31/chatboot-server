@@ -24,49 +24,69 @@ const client = new MongoClient(uri, {
 });
 
 // Connect to MongoDB with retry logic
-const connectWithRetry = async () => {
-  try {
-    await client.connect();
-    await client.db("admin").command({ ping: 1 });
-    console.log('Connected to MongoDB');
-  } catch (err) {
-    console.error('Error connecting to MongoDB:', err);
-    setTimeout(connectWithRetry, 5000);
+const connectWithRetry = async (maxRetries = 5, retryDelay = 5000) => {
+  let retries = 0;
+  
+  while (retries < maxRetries) {
+    try {
+      await client.connect();
+      await client.db("admin").command({ ping: 1 });
+      console.log('Connected to MongoDB');
+      return;
+    } catch (err) {
+      retries++;
+      console.error(`Error connecting to MongoDB (attempt ${retries}/${maxRetries}):`, err.message);
+      
+      if (retries < maxRetries) {
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      } else {
+        console.error('Max retries reached. Could not connect to MongoDB.');
+        throw err;
+      }
+    }
   }
 };
 
-connectWithRetry();
-
 // Webhook Handlers
 app.post("/webhook", async (req, res) => {
-  let body = req.body;
+  try {
+    let body = req.body;
 
-  console.dir(body, { depth: null });
-    
-  if (body.object === "page") {
-    // Process entries in parallel
-    const processing = body.entry.map(async (entry) => {
-      await Promise.all(entry.messaging.map(async (event) => {
-        if (event.message) {
-          await handleMessage(event);
-        } else if (event.postback) {
-          // Handle postback here if needed
-        }
-      }));
-    });
+    console.log('Webhook received:', JSON.stringify(body, null, 2));
 
-    await Promise.all(processing);
+    // Immediately acknowledge receipt of the webhook
     res.status(200).send("EVENT_RECEIVED");
-  } else {
-    res.sendStatus(404);
+
+    if (body.object !== "page") {
+      return;
+    }
+
+    // Process entries sequentially to avoid rate limiting
+    for (const entry of body.entry) {
+      for (const event of entry.messaging) {
+        try {
+          if (event.message) {
+            await handleMessage(event);
+          } else if (event.postback) {
+            // Handle postback here if needed
+          }
+        } catch (error) {
+          console.error('Error processing message:', error);
+          // Continue with next message even if one fails
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error in webhook handler:', error);
   }
 });
 
-
-// Getting response from custom made chatbot.........................
-
+// Getting response from custom made chatbot
 async function getMedibotResponse(userMessage) {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch("https://chat-pdf-8h3c.onrender.com/query", {
       method: "POST",
       headers: {
@@ -75,33 +95,35 @@ async function getMedibotResponse(userMessage) {
       },
       body: JSON.stringify({
         query: userMessage,
-        // Add any additional required parameters here
-        // For example, if you need to specify a PDF context:
-        // pdf_id: "your-pdf-id" 
       }),
-      timeout: 10000 // 10 second timeout
+      signal: controller.signal
     });
 
+    clearTimeout(timeout);
+
     const responseText = await response.text();
-    console.log("Raw API response:", responseText); // Debug log
+    console.log("Raw API response:", responseText);
 
     if (!response.ok) {
       throw new Error(`API Error ${response.status}: ${responseText}`);
     }
 
-    return JSON.parse(responseText);
+    try {
+      return JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Error parsing JSON:', parseError);
+      return { result: responseText }; // Fallback to raw text if parsing fails
+    }
   } catch (error) {
     console.error("Full API error:", error);
     throw new Error(`Failed to get response: ${error.message}`);
   }
 }
 
-
-
 async function handleMessage(event) {
   const senderId = event.sender.id;
   const message = event.message;
-  
+
   // Add input validation
   if (!message?.text?.trim()) {
     return await sendTextMessage(senderId, "Please send a text message.");
@@ -110,55 +132,18 @@ async function handleMessage(event) {
   try {
     console.log("Processing message:", message.text);
     const response = await getMedibotResponse(message.text);
-    
+
     // Handle empty/error responses
     const replyText = response?.result?.trim() || 
       "I couldn't understand that. Could you rephrase?";
-    
+
     await sendTextMessage(senderId, replyText);
-    
   } catch (error) {
     console.error("Full processing error:", error);
-    await sendTextMessage(senderId, 
+    await sendTextMessage(senderId,
       "I'm having technical difficulties. Please try again later.");
   }
 }
-
-// async function getAIResponse(userMessage) {
-//   try {
-//     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-//       method: "POST",
-//       headers: {
-//         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-//         "HTTP-Referer": "http://localhost:3000",
-//         "X-Title": "Chatbot",
-//         "Content-Type": "application/json"
-//       },
-//       body: JSON.stringify({
-//         "model": "deepseek/deepseek-r1:free",
-//         "messages": [
-//           {
-//             "role": "user",
-//             "content": userMessage
-//           }
-//         ]
-//       })
-//     });
-
-//     if (!response.ok) {
-//       throw new Error(`AI API request failed with status ${response.status}`);
-//     }
-
-//     const data = await response.json();
-//     console.log("AI Response:", data);
-    
-//     // Extract the AI's response content
-//     return data.choices[0]?.message?.content || "I didn't get a response from the AI.";
-//   } catch (error) {
-//     console.error("Error getting AI response:", error);
-//     throw error;
-//   }
-// }
 
 async function sendTextMessage(recipientId, messageText) {
   const messageData = {
@@ -166,7 +151,12 @@ async function sendTextMessage(recipientId, messageText) {
     message: { text: messageText }
   };
 
-  await callSendAPI(messageData);
+  try {
+    await callSendAPI(messageData);
+  } catch (error) {
+    console.error('Failed to send message:', error);
+    // Implement retry logic here if needed
+  }
 }
 
 async function callSendAPI(messageData) {
@@ -181,13 +171,13 @@ async function callSendAPI(messageData) {
     );
 
     const data = await response.json();
-    
+
     if (response.ok) {
       console.log("Successfully sent message with id %s to recipient %s", 
         data.message_id, data.recipient_id);
     } else {
       console.error("Failed to send message:", data.error);
-      throw new Error(data.error.message);
+      throw new Error(data.error?.message || 'Unknown Facebook API error');
     }
   } catch (error) {
     console.error("API request failed:", error);
@@ -200,9 +190,9 @@ app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
-  
+
   if (mode && token) {
-    if (mode === "subscribe" && token === process.env.FACEBOOK_PAGE_ACCESS_TOKEN) {
+    if (mode === "subscribe" && token === process.env.FACEBOOK_VERIFY_TOKEN) {
       console.log("WEBHOOK_VERIFIED");
       return res.status(200).send(challenge);
     }
@@ -212,12 +202,34 @@ app.get("/webhook", (req, res) => {
 });
 
 // Health Check
-app.get("/", (req, res) => {
-  res.send("Chatbot server is running successfully!");
+app.get("/", async (req, res) => {
+  try {
+    await client.db("admin").command({ ping: 1 });
+    res.status(200).json({
+      status: "healthy",
+      database: "connected",
+      timestamp: new Date()
+    });
+  } catch (error) {
+    res.status(500).json({
+      status: "unhealthy",
+      database: "disconnected",
+      error: error.message
+    });
+  }
 });
 
 // Start Server
 const PORT = process.env.PORT || 2000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+
+(async () => {
+  try {
+    await connectWithRetry();
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+})();
