@@ -109,7 +109,8 @@ async function handleMessage(event) {
     // Get response from DeepSeek AI
     const medibotResponse = await getMedibotResponse(message.text);
     console.log("Medibot response:", medibotResponse);
-    const aiResponse = await getAIResponse(message.text);
+    const aiResponse = await getMedibotResponse(message.text);
+    // const aiResponse = await getAIResponse(message.text);
 
 
     
@@ -122,41 +123,41 @@ async function handleMessage(event) {
   }
 }
 
-async function getAIResponse(userMessage) {
-  try {
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
-        "HTTP-Referer": "http://localhost:3000",
-        "X-Title": "Chatbot",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        "model": "deepseek/deepseek-r1:free",
-        "messages": [
-          {
-            "role": "user",
-            "content": userMessage
-          }
-        ]
-      })
-    });
+// async function getAIResponse(userMessage) {
+//   try {
+//     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+//       method: "POST",
+//       headers: {
+//         "Authorization": `Bearer ${process.env.OPENROUTER_API_KEY}`,
+//         "HTTP-Referer": "http://localhost:3000",
+//         "X-Title": "Chatbot",
+//         "Content-Type": "application/json"
+//       },
+//       body: JSON.stringify({
+//         "model": "deepseek/deepseek-r1:free",
+//         "messages": [
+//           {
+//             "role": "user",
+//             "content": userMessage
+//           }
+//         ]
+//       })
+//     });
 
-    if (!response.ok) {
-      throw new Error(`AI API request failed with status ${response.status}`);
-    }
+//     if (!response.ok) {
+//       throw new Error(`AI API request failed with status ${response.status}`);
+//     }
 
-    const data = await response.json();
-    console.log("AI Response:", data);
+//     const data = await response.json();
+//     console.log("AI Response:", data);
     
-    // Extract the AI's response content
-    return data.choices[0]?.message?.content || "I didn't get a response from the AI.";
-  } catch (error) {
-    console.error("Error getting AI response:", error);
-    throw error;
-  }
-}
+//     // Extract the AI's response content
+//     return data.choices[0]?.message?.content || "I didn't get a response from the AI.";
+//   } catch (error) {
+//     console.error("Error getting AI response:", error);
+//     throw error;
+//   }
+// }
 
 async function sendTextMessage(recipientId, messageText) {
   const messageData = {
