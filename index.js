@@ -41,7 +41,6 @@ connectWithRetry();
 app.post("/webhook", async (req, res) => {
   let body = req.body;
 
-  console.log(`\u{1F7EA} Received webhook:`);
   console.dir(body, { depth: null });
     
   if (body.object === "page") {
@@ -49,10 +48,8 @@ app.post("/webhook", async (req, res) => {
     const processing = body.entry.map(async (entry) => {
       await Promise.all(entry.messaging.map(async (event) => {
         if (event.message) {
-          console.log("Received message:", event.message);
           await handleMessage(event);
         } else if (event.postback) {
-          console.log("Received postback:", event.postback);
           // Handle postback here if needed
         }
       }));
@@ -65,6 +62,43 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+
+// Getting response from custom made chatbot.........................
+
+async function getMedibotResponse(userMessage) {
+ 
+  try {
+    const response = await fetch("https://chat-pdf-8h3c.onrender.com/query", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        query: userMessage
+      })
+    });
+   
+
+    if (!response.ok) {
+      throw new Error(`Medibot API request failed with status ${response.status}`);
+    }
+
+    const data = await response.json();
+    
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Error getting Medibot response:", error);
+    throw error;
+  }
+}
+
+
+
 async function handleMessage(event) {
   const senderId = event.sender.id;
   const message = event.message;
@@ -73,7 +107,11 @@ async function handleMessage(event) {
   
   try {
     // Get response from DeepSeek AI
+    const medibotResponse = await getMedibotResponse(message.text);
+    console.log("Medibot response:", medibotResponse);
     const aiResponse = await getAIResponse(message.text);
+
+
     
     // Send the AI response back to the user
     await sendTextMessage(senderId, aiResponse);
