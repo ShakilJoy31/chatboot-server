@@ -66,34 +66,33 @@ app.post("/webhook", async (req, res) => {
 // Getting response from custom made chatbot.........................
 
 async function getMedibotResponse(userMessage) {
- 
   try {
     const response = await fetch("https://chat-pdf-8h3c.onrender.com/query", {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "Accept": "application/json"
       },
       body: JSON.stringify({
-        query: userMessage
-      })
+        query: userMessage,
+        // Add any additional required parameters here
+        // For example, if you need to specify a PDF context:
+        // pdf_id: "your-pdf-id" 
+      }),
+      timeout: 10000 // 10 second timeout
     });
-   
+
+    const responseText = await response.text();
+    console.log("Raw API response:", responseText); // Debug log
 
     if (!response.ok) {
-      throw new Error(`Medibot API request failed with status ${response.status}`);
+      throw new Error(`API Error ${response.status}: ${responseText}`);
     }
 
-    const data = await response.json();
-    
-    
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    
-    return data;
+    return JSON.parse(responseText);
   } catch (error) {
-    console.error("Error getting Medibot response:", error);
-    throw error;
+    console.error("Full API error:", error);
+    throw new Error(`Failed to get response: ${error.message}`);
   }
 }
 
@@ -103,23 +102,25 @@ async function handleMessage(event) {
   const senderId = event.sender.id;
   const message = event.message;
   
-  console.log(`Received message from ${senderId}:`, message.text);
-  
+  // Add input validation
+  if (!message?.text?.trim()) {
+    return await sendTextMessage(senderId, "Please send a text message.");
+  }
+
   try {
-    // Get response from DeepSeek AI
-    const medibotResponse = await getMedibotResponse(message.text);
-    console.log("Medibot response:", medibotResponse);
-    const aiResponse = await getMedibotResponse(message.text);
-    // const aiResponse = await getAIResponse(message.text);
-
-
-    console.log(aiResponse)
-    // Send the AI response back to the user
-    await sendTextMessage(senderId, aiResponse.result);
+    console.log("Processing message:", message.text);
+    const response = await getMedibotResponse(message.text);
+    
+    // Handle empty/error responses
+    const replyText = response?.result?.trim() || 
+      "I couldn't understand that. Could you rephrase?";
+    
+    await sendTextMessage(senderId, replyText);
+    
   } catch (error) {
-    console.error('Failed to process message:', error);
-    // Send fallback message if AI fails
-    await sendTextMessage(senderId, "Sorry, I'm having trouble responding right now. Please try again later.");
+    console.error("Full processing error:", error);
+    await sendTextMessage(senderId, 
+      "I'm having technical difficulties. Please try again later.");
   }
 }
 
@@ -220,4 +221,3 @@ const PORT = process.env.PORT || 2000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
-
