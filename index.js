@@ -31,16 +31,16 @@ const connectWithRetry = async (maxRetries = 5, retryDelay = 5000) => {
     try {
       await client.connect();
       await client.db("admin").command({ ping: 1 });
-      console.log('Connected to MongoDB');
+     
       return;
     } catch (err) {
       retries++;
-      console.error(`Error connecting to MongoDB (attempt ${retries}/${maxRetries}):`, err.message);
+      
       
       if (retries < maxRetries) {
         await new Promise(resolve => setTimeout(resolve, retryDelay));
       } else {
-        console.error('Max retries reached. Could not connect to MongoDB.');
+       
         throw err;
       }
     }
@@ -52,7 +52,7 @@ app.post("/webhook", async (req, res) => {
   try {
     let body = req.body;
 
-    console.log('Webhook received:', JSON.stringify(body, null, 2));
+   
 
     // Immediately acknowledge receipt of the webhook
     res.status(200).send("EVENT_RECEIVED");
@@ -71,13 +71,13 @@ app.post("/webhook", async (req, res) => {
             // Handle postback here if needed
           }
         } catch (error) {
-          console.error('Error processing message:', error);
+        
           // Continue with next message even if one fails
         }
       }
     }
   } catch (error) {
-    console.error('Error in webhook handler:', error);
+   
   }
 });
 
@@ -102,7 +102,7 @@ async function getMedibotResponse(userMessage) {
     clearTimeout(timeout);
 
     const responseText = await response.text();
-    console.log("Raw API response:", responseText);
+   
 
     if (!response.ok) {
       throw new Error(`API Error ${response.status}: ${responseText}`);
@@ -111,11 +111,11 @@ async function getMedibotResponse(userMessage) {
     try {
       return JSON.parse(responseText);
     } catch (parseError) {
-      console.error('Error parsing JSON:', parseError);
+     
       return { result: responseText }; // Fallback to raw text if parsing fails
     }
   } catch (error) {
-    console.error("Full API error:", error);
+  
     throw new Error(`Failed to get response: ${error.message}`);
   }
 }
@@ -132,6 +132,7 @@ async function handleMessage(event) {
   try {
     console.log("Processing message:", message.text);
     const response = await getMedibotResponse(message.text);
+    console.log("Chatbot response:", response);
 
     // Handle empty/error responses
     const replyText = response?.result?.trim() || 
@@ -139,7 +140,7 @@ async function handleMessage(event) {
 
     await sendTextMessage(senderId, replyText);
   } catch (error) {
-    console.error("Full processing error:", error);
+  
     await sendTextMessage(senderId,
       "I'm having technical difficulties. Please try again later.");
   }
@@ -154,7 +155,7 @@ async function sendTextMessage(recipientId, messageText) {
   try {
     await callSendAPI(messageData);
   } catch (error) {
-    console.error('Failed to send message:', error);
+    
     // Implement retry logic here if needed
   }
 }
@@ -176,11 +177,10 @@ async function callSendAPI(messageData) {
       console.log("Successfully sent message with id %s to recipient %s", 
         data.message_id, data.recipient_id);
     } else {
-      console.error("Failed to send message:", data.error);
       throw new Error(data.error?.message || 'Unknown Facebook API error');
     }
   } catch (error) {
-    console.error("API request failed:", error);
+   
     throw error;
   }
 }
@@ -193,7 +193,7 @@ app.get("/webhook", (req, res) => {
 
   if (mode && token) {
     if (mode === "subscribe" && token === process.env.FACEBOOK_VERIFY_TOKEN) {
-      console.log("WEBHOOK_VERIFIED");
+      
       return res.status(200).send(challenge);
     }
     return res.sendStatus(403);
