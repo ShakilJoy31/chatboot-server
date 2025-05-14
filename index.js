@@ -113,9 +113,9 @@ async function handleMessage(event) {
     // const aiResponse = await getAIResponse(message.text);
 
 
-    
+    console.log(aiResponse)
     // Send the AI response back to the user
-    await sendTextMessage(senderId, aiResponse);
+    await sendTextMessage(senderId, aiResponse.result);
   } catch (error) {
     console.error('Failed to process message:', error);
     // Send fallback message if AI fails
