@@ -114,7 +114,7 @@ async function handleMessage(event) {
     console.log("Processing message:", message.text);
     const response = await getMedibotResponse(message.text);
     console.log("Chatbot response:", response);
-    await sendTextMessage(senderId, "Please wait. I am coming"+message.text);
+    await sendTextMessage(senderId, response);
   } catch (error) {
     console.error('Failed to send reply:', error);
   }
