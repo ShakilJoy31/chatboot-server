@@ -174,13 +174,8 @@ app.get("/webhook", (req, res) => {
 // Health Check
 app.get("/", async (req, res) => {
   try {
-    const response = await getMedibotResponse('How to do operation?');
-    console.log("Chatbot response:", response);
-    
-    // Send JSON response with both status message and chatbot response
     res.status(200).json({
       status: "Chatbot server is running successfully!",
-      chatbotResponse: response
     });
   } catch (error) {
     console.error("Error in health check:", error);
