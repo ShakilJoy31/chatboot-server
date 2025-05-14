@@ -40,7 +40,13 @@ connectWithRetry();
 async function getMedibotResponse(userMessage) {
   console.log("User message:", userMessage);
   try {
-    const response = await fetch("https://chat-pdf-8h3c.onrender.com/query", {
+    // The bbok document. 
+    // https://book-business-custom-chatbot.onrender.com/
+
+
+    // The medical document.
+    // https://chat-pdf-8h3c.onrender.com/query
+    const response = await fetch("https://book-business-custom-chatbot.onrender.com/query", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
